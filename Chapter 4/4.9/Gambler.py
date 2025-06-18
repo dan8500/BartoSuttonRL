@@ -3,11 +3,12 @@ import matplotlib.pyplot as plt
 
 ph = 0.4
 
-state_space = np.arange(1, 100)
+goal = 128
 
-goal = 100
+state_space = np.arange(1, goal)
 
-threshold = 10**(-11)
+
+threshold = 10**(-8)
 
 v = np.zeros(goal+1) #array of v(s) for all s
 v[goal] = 1
@@ -19,14 +20,21 @@ while True:
     delta = 0
     for s in state_space:
         max_s = min(s,goal-s)
-        action_space = np.arange(0, max_s+1)
+        action_space = np.arange(1, max_s+1) #don't need 0 because it doesn't do anything
         action_returns = np.zeros_like(action_space, dtype=float) 
         v_old = v[s]
-        for a in action_space:
-            action_returns[a] = ph*v[s+a]+(1-ph)*v[s-a]
-        v[s] = np.max(action_returns)
+        for idx, a in enumerate(action_space):
+            #reward = 1 if s + a == goal else 0
+            #action_returns[idx] = ph*(reward+v[s+a])+(1-ph)*v[s-a]
+            if s + a == goal:
+                action_returns[idx] = ph * 1 + (1 - ph) * v[s - a]  # no v[goal] added!
+            else:
+                action_returns[idx] = ph * v[s + a] + (1 - ph) * v[s - a]
         best_action_index = np.argmax(action_returns)
+        best_actions = np.flatnonzero(action_returns == np.max(action_returns))
+        #policy[s] = int(np.mean(action_space[best_actions]))
         policy[s] = action_space[best_action_index]
+        v[s] = action_returns[best_action_index]
         delta = max(delta,abs(v[s]-v_old))
     if (delta < threshold):
         break
