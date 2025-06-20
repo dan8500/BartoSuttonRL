@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 ph = 0.4
 
-goal = 128
+goal = 127
 
 state_space = np.arange(1, goal)
 
