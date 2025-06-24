@@ -1,0 +1,151 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+maze = np.zeros((6, 9), dtype=int)
+maze[3, 0:8] = -1
+rows, cols = maze.shape
+
+goal = [0,8]
+maze[goal[0],goal[1]]  = 100
+start = [5,3] #row then column, starting from top left corner and 0,0
+
+moves = {"N": (-1, 0), "E": (0, 1), "S": (1, 0), "W": (0, -1), "NE": (-1, 1), "SE": (1, 1), "SW": (1, -1), "NW": (-1, -1)} #in python we count from the upper left corner of the array, so to move north you decrease the column index
+move_keys = list(moves.keys())
+
+alpha = 0.1
+gamma = 1
+epsilon = 0.1 
+n = 50
+kappa = 0.1
+time = 0
+
+Q = np.ones((len(maze), len(maze[0]), len(moves))) * 0.5 #numpy breaks first dimension into slices, fyi
+Model = np.empty((len(maze), len(maze[0]), len(moves)), dtype=object)
+for index in np.ndindex(Model.shape):
+    Model[index] = (0, 0, 0)
+previously_observed_states_and_actions = np.ones((len(maze), len(maze[0]), len(moves))) * 0
+last_visited = np.zeros((rows, cols, len(moves)))
+
+
+def step(s, a):
+    # Current position
+    row, col = s
+
+    # Move delta for action 'a'
+    delta_row, delta_col = moves[a]
+
+    # New position after move
+    new_row = row + delta_row 
+    new_col = col + delta_col
+
+    # Keep new position inside the grid boundaries
+    new_row = max(0, min(rows - 1, new_row))
+    new_col = max(0, min(cols - 1, new_col))
+
+    # Update state unless we hit wall
+    s_new = [int(new_row), int(new_col)]
+    if maze[s_new[0], s_new[1]] == -1:
+        return s
+    else:
+        return s_new
+
+#epsilon greedy action choice, used for behavioral policy
+def choose_action(s):
+    if np.random.rand() < epsilon:
+        return np.random.choice(move_keys)
+    else:
+        return move_keys[np.argmax(Q[s[0], s[1], :])]
+    
+s_new = start
+
+for i in range(0, 500):
+    s = start
+    
+    while True:
+        time += 1
+        a = choose_action(s)
+        last_visited[s[0], s[1], move_keys.index(a)] = time
+        previously_observed_states_and_actions[s[0],s[1],move_keys.index(a)] += 1
+        s_a_counter = previously_observed_states_and_actions[s[0],s[1],move_keys.index(a)]
+        s_new = step(s,a)
+        r = maze[s_new[0],s_new[1]] + kappa*np.sqrt(time - last_visited[s[0], s[1], move_keys.index(a)]) #dyna Q+ implementation
+        Q[s[0],s[1],move_keys.index(a)] += alpha*(r + gamma*np.max(Q[s_new[0],s_new[1],:]) - Q[s[0],s[1],move_keys.index(a)])
+        Model[s[0],s[1],move_keys.index(a)] = (s_new[0], s_new[1], r) 
+        print(i)
+
+        for j in range(0,n):
+            mask = previously_observed_states_and_actions != 0
+            visited_indices = np.argwhere(mask)
+            s_rand_row, s_rand_col, a_rand = visited_indices[np.random.randint(len(visited_indices))]
+            s_prime_rand_row, s_prime_rand_col, r_rand = Model[s_rand_row, s_rand_col, a_rand]
+            Q[s_rand_row,s_rand_col,a_rand] += alpha*(r_rand + gamma*np.max(Q[s_prime_rand_row,s_prime_rand_col,:]) - Q[s_rand_row,s_rand_col,a_rand])
+
+        if s_new == goal:
+            break
+        s = s_new
+
+        
+    """
+    if i > 300:
+        maze[3, 8] = -1
+        maze[3, 0] = 0
+        print(i)
+    """
+print(Q)
+
+#with regular dyna-Q, the algorithm fails to find the new path even after several real minutes of computing
+
+s = start
+optimal_path = [tuple(s)]
+while s != goal:
+    a = move_keys[np.argmax(Q[s[0], s[1], :])]
+    s = step(s, a)
+    optimal_path.append(tuple(s))
+
+# Initialize arrow directions
+U = np.zeros((rows, cols))
+V = np.zeros((rows, cols))
+U_opt = np.zeros((rows, cols))
+V_opt = np.zeros((rows, cols))
+
+# Fill in all arrows (light background)
+for r in range(rows):
+    for c in range(cols):
+        if [r, c] == goal:
+            continue
+        best_idx = np.argmax(Q[r, c, :])
+        dr, dc = moves[move_keys[best_idx]]
+        U[r, c] = dc
+        V[r, c] = dr
+
+# Fill in only arrows on optimal path (black overlay)
+for (r, c) in optimal_path:
+    if [r, c] == goal:
+        continue
+    best_idx = np.argmax(Q[r, c, :])
+    dr, dc = moves[move_keys[best_idx]]
+    U_opt[r, c] = dc
+    V_opt[r, c] = dr
+
+# Plot
+X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
+plt.figure(figsize=(8, 6))
+plt.title("Learned Policy with Optimal Path Highlighted")
+plt.imshow(maze, cmap='Blues', origin='upper', alpha=0.3)
+
+# All arrows in light red
+plt.quiver(X, Y, U, V, scale=1, scale_units='xy', angles='xy', pivot='middle', color='lightcoral', alpha=0.5)
+
+# Greedy-path arrows in black
+plt.quiver(X, Y, U_opt, V_opt, scale=1, scale_units='xy', angles='xy', pivot='middle', color='black')
+
+# Goal marker
+plt.scatter(goal[1], goal[0], marker='*', color='gold', s=200, label='Goal')
+
+plt.xlim(-0.5, cols - 0.5)
+plt.ylim(rows - 0.5, -0.5)
+plt.xlabel("Column")
+plt.ylabel("Row")
+plt.grid(True)
+plt.legend()
+plt.show()
