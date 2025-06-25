@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-maze = np.zeros((6, 9), dtype=int)
-maze[3, 0:8] = -1
+maze = np.ones((6, 9), dtype=int) * -0.1
+maze[3, 0:8] = -10
 rows, cols = maze.shape
 
 goal = [0,8]
@@ -12,11 +12,11 @@ start = [5,3] #row then column, starting from top left corner and 0,0
 moves = {"N": (-1, 0), "E": (0, 1), "S": (1, 0), "W": (0, -1), "NE": (-1, 1), "SE": (1, 1), "SW": (1, -1), "NW": (-1, -1)} #in python we count from the upper left corner of the array, so to move north you decrease the column index
 move_keys = list(moves.keys())
 
-alpha = 0.1
+alpha = 0.5
 gamma = 1
 epsilon = 0.1 
 n = 50
-kappa = 0.1
+kappa = 0.001
 time = 0
 
 Q = np.ones((len(maze), len(maze[0]), len(moves))) * 0.5 #numpy breaks first dimension into slices, fyi
@@ -56,48 +56,71 @@ def choose_action(s):
     else:
         return move_keys[np.argmax(Q[s[0], s[1], :])]
     
-s_new = start
+num_episodes = 10000
+max_steps = 1000
 
-for i in range(0, 500):
+for i in range(num_episodes):
     s = start
-    
-    while True:
-        time += 1
+    steps = 0
+    visited_states = set()
+
+    while s != goal and steps < max_steps: #True:
+        if tuple(s) in visited_states: #
+            print(f"Loop detected in episode {i+1} at step {steps}, state {s}")
+            break # breaks out of this while loop, stopping the loop traversal. If is a conditional block, not a loop, so the break breaks out of the loop containing the if statement.
+        visited_states.add(tuple(s))
+
         a = choose_action(s)
-        last_visited[s[0], s[1], move_keys.index(a)] = time
-        previously_observed_states_and_actions[s[0],s[1],move_keys.index(a)] += 1
-        s_a_counter = previously_observed_states_and_actions[s[0],s[1],move_keys.index(a)]
+        #time += 1
+        #last_visited[s[0], s[1], move_keys.index(a)] = time
+        #previously_observed_states_and_actions[s[0],s[1],move_keys.index(a)] += 1
+        #s_a_counter = previously_observed_states_and_actions[s[0],s[1],move_keys.index(a)]
         s_new = step(s,a)
-        r = maze[s_new[0],s_new[1]] + kappa*np.sqrt(time - last_visited[s[0], s[1], move_keys.index(a)]) #dyna Q+ implementation
+        r = maze[s_new[0],s_new[1]] #+ kappa*np.sqrt(time - last_visited[s[0], s[1], move_keys.index(a)]) #dyna Q+ implementation
         Q[s[0],s[1],move_keys.index(a)] += alpha*(r + gamma*np.max(Q[s_new[0],s_new[1],:]) - Q[s[0],s[1],move_keys.index(a)])
-        Model[s[0],s[1],move_keys.index(a)] = (s_new[0], s_new[1], r) 
-        print(i)
+        #Model[s[0],s[1],move_keys.index(a)] = (s_new[0], s_new[1], r)
+        #print(i)
+        steps += 1
 
+        """
         for j in range(0,n):
-            mask = previously_observed_states_and_actions != 0
-            visited_indices = np.argwhere(mask)
+            visited_indices = np.argwhere(previously_observed_states_and_actions > 0)
             s_rand_row, s_rand_col, a_rand = visited_indices[np.random.randint(len(visited_indices))]
-            s_prime_rand_row, s_prime_rand_col, r_rand = Model[s_rand_row, s_rand_col, a_rand]
-            Q[s_rand_row,s_rand_col,a_rand] += alpha*(r_rand + gamma*np.max(Q[s_prime_rand_row,s_prime_rand_col,:]) - Q[s_rand_row,s_rand_col,a_rand])
 
-        if s_new == goal:
-            break
+            s_prime_rand_row, s_prime_rand_col, r_rand = Model[s_rand_row, s_rand_col, a_rand]
+
+            if previously_observed_states_and_actions[s_rand_row, s_rand_col, a_rand] == 0:
+                continue
+            if (s_prime_rand_row, s_prime_rand_col) == (0, 0) and r_rand == 0 and [s_rand_row, s_rand_col] != [0, 0]:
+                continue
+
+            bonus = 0 #+ kappa * np.sqrt(time - last_visited[s_rand_row, s_rand_col, a_rand]) #dyna Q+ implementation of bonus in planning
+            Q[s_rand_row,s_rand_col,a_rand] += alpha*(r_rand + bonus + gamma*np.max(Q[s_prime_rand_row,s_prime_rand_col,:]) - Q[s_rand_row,s_rand_col,a_rand])
+        #"""
         s = s_new
+        #if s_new == goal:
+        #    break
+    print(f"Episode {i+1} finished in {steps} steps")
+        
 
         
     """
-    if i > 300:
+    if i > 300: #seems to take a very long time for it to find the new path, if it ever finds it. So far it hasn't found it.
         maze[3, 8] = -1
         maze[3, 0] = 0
-        print(i)
-    """
+    #"""
 print(Q)
 
 #with regular dyna-Q, the algorithm fails to find the new path even after several real minutes of computing
 
 s = start
 optimal_path = [tuple(s)]
+visited = set()
 while s != goal:
+    if tuple(s) in visited:
+        print("Loop detected in optimal path!")
+        break
+    visited.add(tuple(s))
     a = move_keys[np.argmax(Q[s[0], s[1], :])]
     s = step(s, a)
     optimal_path.append(tuple(s))
